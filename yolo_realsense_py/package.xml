@@ -5,10 +5,20 @@
   <version>0.0.0</version>
   <description>TODO: Package description</description>
   <maintainer email="chenyu1056@gmail.com">evan</maintainer>
-  <license>TODO: License declaration</license>
+  <license>Apache-2.0</license>
 
   <depend>rclpy</depend>
   <depend>status_interfaces</depend>
+  <exec_depend>sensor_msgs</exec_depend>
+  <exec_depend>cv_bridge</exec_depend>
+  <exec_depend>geometry_msgs</exec_depend>
+  <exec_depend>python3-numpy</exec_depend>
+  <exec_depend>python3-opencv</exec_depend>
+  <exec_depend>python3-torch</exec_depend>
+  <exec_depend>python3-ultralytics</exec_depend>
+
+  <!-- 自定义消息依赖 -->
+  <depend>detectionresult</depend> 
 
   <test_depend>ament_copyright</test_depend>
   <test_depend>ament_flake8</test_depend>

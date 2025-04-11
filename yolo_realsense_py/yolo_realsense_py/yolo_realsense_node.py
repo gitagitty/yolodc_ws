@@ -18,7 +18,7 @@ class YOLORealsenseNode(Node):
         self.get_logger().info(f'Using device: {self.device}')
 
         # 加载 YOLOv11 模型
-        self.model = YOLO('/home/evan/yolotrain/runs/detect/train2/weights/best.pt')  # 使用 YOLO 类加载
+        self.model = YOLO('/home/evan/yolodc_ws/src/yolodc_ws/model/best.pt')  # 使用 YOLO 类加载
         self.model.to(self.device)  # 移动到指定设备（CPU/GPU）
         self.model.eval()  # 设置为推理模式
 
@@ -28,13 +28,13 @@ class YOLORealsenseNode(Node):
         # 订阅 RealSense 的 RGB 和深度图像
         self.rgb_subscription = self.create_subscription(
             Image,
-            '/camera/camera/color/image_raw',
+            '/camera/color/image_raw',
             self.rgb_callback,
             10)
 
         self.depth_subscription = self.create_subscription(
             Image,
-            '/camera/camera/depth/image_rect_raw',
+            '/camera/depth/image_rect_raw',
             self.depth_callback,
             10)
 
