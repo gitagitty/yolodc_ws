@@ -20,7 +20,8 @@ setup(
     tests_require=['pytest'],
     entry_points={
      'console_scripts': [
-     'diablo_auto_nav_node = dataget.yolozk_xykp:main'
+     'xyzk_node = dataget.yolozk_xykp:main',
+     'xzk_node = dataget.yolozk_xkp:main',
         ],
     },
 )

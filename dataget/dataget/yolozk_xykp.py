@@ -41,7 +41,7 @@ from detectionresult.msg import DetectionResult
 
 class AutoNavNode(Node):
     def __init__(self):
-        super().__init__('diablo_auto_nav_node')
+        super().__init__('xyzk_node')
 
         # ===== ROS 通信接口 =====
         self.publisher = self.create_publisher(MotionCtrl, '/diablo/MotionCmd', 2)
@@ -54,12 +54,13 @@ class AutoNavNode(Node):
         # ===== 控制参数 =====
         self.ctrl_msg = MotionCtrl()
         self.kp = 0.5             # 前进比例控制增益（用于计算 forward = kp * distance）
-        self.kp_x = 0.1           # x方向横向控制增益（用于计算 left = -kp_x * target_x）
+        self.kp_x = 0.01           # x方向横向控制增益（用于计算 left = -kp_x * target_x）
         self.v_min = 0.05         # 最小前进速度（m/s）
         self.v_max = 0.5          # 最大前进速度（m/s）
         self.turn_gain = 0.05     # 左右修正增益（备用控制）
         self.leg_gain = 0.8       # 上下修正增益（备用控制）
-        self.rotate_speed = 0.1   # 原地旋转速度
+        self.rotate_speed = 0.01   # 原地旋转速度
+        self.r_max = 0.01
 
         # ===== 目标检测数据缓存 =====
         self.current_detection = None
@@ -77,7 +78,7 @@ class AutoNavNode(Node):
 
     # 辅助函数：裁剪前进速度到 [v_min, v_max]
     def clip_speed(self, speed: float) -> float:
-        return max(self.v_min, min(self.v_max, speed))
+        return min(self.v_max, speed)
 
     # 发布运动控制消息
     def generate_msgs(self, forward: float, left: float, up: float):
@@ -96,37 +97,40 @@ class AutoNavNode(Node):
 
     # 主控制逻辑循环
     def control_loop(self):
-        # 1️⃣ 未检测到机器人和电磁铁时，原地顺时针旋转
+        """ # 1️⃣ 未检测到机器人和电磁铁时，原地顺时针旋转
         if (0 not in self.target_z_dict) and (1 not in self.target_z_dict):
             self.get_logger().info("No robot or magnet detected. Rotating.")
             self.generate_msgs(0.0, -self.rotate_speed, 0.0)
-            return
+            return """
 
         # 获取目标距离信息
         robot_z = self.target_z_dict.get(1, 0.0)
         magnet_z = self.target_z_dict.get(0, 0.0)
 
         # 2️⃣ 情况 A：当机器人距离 > 0.8m 时
-        if robot_z > 0.8:
+        if robot_z >= 1.0:
+            self.get_logger().debug("A condition occur")
             # 使用机器人距离计算前进速度并裁剪
             forward_speed = self.clip_speed(self.kp * robot_z)
             # 结合目标 x 坐标进行左右修正
-            left_cmd = -self.kp_x * self.current_detection.center.x if self.current_detection else 0.0
+            left_cmd = -self.r_max if self.current_detection else 0.0
             self.get_logger().info(f"[A] Robot far ({robot_z:.2f}m). Forward = {forward_speed:.2f} m/s, Left = {left_cmd:.2f} m/s")
             self.generate_msgs(forward_speed, left_cmd, 0.0)
             return
 
         # 3️⃣ 情况 C：当机器人距离在 (0, 1.0)m 且检测到电磁铁时
         if 0 < robot_z < 1.0 and magnet_z != 0:
+            self.get_logger().debug("C condition occur")
             # 使用电磁铁距离计算前进速度并裁剪
             forward_speed = self.clip_speed(self.kp * magnet_z)
-            left_cmd = -self.kp_x * self.current_detection.center.x if self.current_detection else 0.0
+            left_cmd = -self.r_max if self.current_detection else 0.0
             self.get_logger().info(f"[C] Robot@{robot_z:.2f}m + Magnet@{magnet_z:.2f}m → Forward = {forward_speed:.2f} m/s, Left = {left_cmd:.2f} m/s")
             self.generate_msgs(forward_speed, left_cmd, 0.0)
             return
 
         # 4️⃣ 情况 B：当机器人距离在 (0, 0.3)m 且未检测到电磁铁时（不进行左右调整）
         if 0 < robot_z < 0.3 and magnet_z == 0:
+            self.get_logger().debug("B condition occur")
             self.forward_speed = 0.2  # 固定前进速度
             self.required_duration = 5.0  # 定时 5 秒
             self.forward_start_time = self.get_clock().now()
@@ -141,16 +145,18 @@ class AutoNavNode(Node):
             if elapsed < self.required_duration:
                 self.generate_msgs(self.forward_speed, 0.0, 0.0)
             else:
-                self.shutdown_node()
+                self.generate_msgs(0.0, 0.0, 0.0)
+                self.is_forwarding = False
             return
 
         # 5️⃣ fallback 跟踪控制：当检测到目标但不满足前述条件时
         if self.current_detection:
+            self.get_logger().debug("D condition occur")
             target_x = self.current_detection.center.x
-            target_y = self.current_detection.center.y
+            # target_y = self.current_detection.center.0.8:y
             # 备用左右调整
-            left_cmd = -self.turn_gain * target_x
-            up_cmd = self.leg_gain * target_y
+            left_cmd = -self.r_max
+            # up_cmd = self.leg_gain * target_y
             forward_speed = self.clip_speed(self.kp * robot_z) if robot_z > 0 else 0.0
             self.get_logger().info(f"[TRACK] Forward={forward_speed:.2f}, Left={left_cmd:.2f}, Up={up_cmd:.2f}")
             self.generate_msgs(forward_speed, left_cmd, up_cmd)

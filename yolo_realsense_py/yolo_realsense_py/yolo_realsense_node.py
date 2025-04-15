@@ -97,9 +97,9 @@ class YOLORealsenseNode(Node):
 
                         # 获取深度值
                         depth = self.latest_depth_image[center_y, center_x] / 1000.0  # 转换为米
-                        if depth == 0:
+                        """ if depth == 0:
                             self.get_logger().warn('Depth value is zero.')
-                            continue
+                            continue """
                         # 发布自定义消息
                         detection_msg = DetectionResult()
                         detection_msg.class_id = int(class_id)
