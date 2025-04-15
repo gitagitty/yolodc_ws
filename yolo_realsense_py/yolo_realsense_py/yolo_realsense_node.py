@@ -28,13 +28,13 @@ class YOLORealsenseNode(Node):
         # 订阅 RealSense 的 RGB 和深度图像
         self.rgb_subscription = self.create_subscription(
             Image,
-            '/camera/color/image_raw',
+            '/camera/camera/color/image_raw',
             self.rgb_callback,
             10)
 
         self.depth_subscription = self.create_subscription(
             Image,
-            '/camera/depth/image_rect_raw',
+            '/camera/camera/depth/image_rect_raw',
             self.depth_callback,
             10)
 
@@ -90,14 +90,16 @@ class YOLORealsenseNode(Node):
                 for detection in detections:
                     x1, y1, x2, y2, confidence, class_id = map(float, detection[:6])  # 确保转换为 float 类型
 
-                    if confidence > 0.5:
+                    if confidence > 0.8:  
                         # 计算中心点
-                        center_x = int((x1 + x2) / 2)
-                        center_y = int((y1 + y2) / 2)
+                        center_x = int((x1 + x2) / 2) - 320
+                        center_y = int((y1 + y2) / 2) - 320
 
                         # 获取深度值
                         depth = self.latest_depth_image[center_y, center_x] / 1000.0  # 转换为米
-
+                        if depth == 0:
+                            self.get_logger().warn('Depth value is zero.')
+                            continue
                         # 发布自定义消息
                         detection_msg = DetectionResult()
                         detection_msg.class_id = int(class_id)
