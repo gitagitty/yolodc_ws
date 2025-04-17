@@ -53,21 +53,19 @@ class AutoNavNode(Node):
 
         # ===== 控制参数 =====
         self.ctrl_msg = MotionCtrl()
-        self.kp = 0.5             # 前进比例控制增益（用于计算 forward = kp * distance）
-        self.kp_x = 0.005          # x方向横向控制增益（用于计算 left = -kp_x * target_x）
-        self.v_min = 0.05         # 最小前进速度（m/s）
-        self.v_max = 0.1          # 最大前进速度（m/s）
+        self.kp = 0.01            # 前进比例控制增益（用于计算 forward = kp * distance）
+        self.kp_x = 0.001         # x方向横向控制增益（用于计算 left = -kp_x * target_x）
+        # self.v_min = 0.05         # 最小前进速度（m/s）
+        self.v_max = 0.3        # 最大前进速度（m/s）
         self.turn_gain = 0.05     # 左右修正增益（备用控制）
         self.leg_gain = 0.8       # 上下修正增益（备用控制）
-        self.rotate_speed = 0.01   # 原地旋转速度
-        self.r_max = 0.01
+        self.rotate_speed = 0.03   # 原地旋转速度
+        self.r_max = 0.07
 
         # ===== 目标检测数据缓存 =====
         self.current_detection = None
-        self.target_x_dict = {}   # 存储每个 class_id 的 center.x
-        self.target_y_dict = {}   # 存储每个 class_id 的 center.y
-        self.target_z_dict = {}   # 存储每个 class_id 的 center.z（作为距离依据）
-
+        self.target_x = 0.00  
+        self.target_z = 0.00 
         # ===== 定时前进控制参数（用于情况B） =====
         self.forward_start_time = None   # 定时前进开始时间
         self.required_duration = 0.0       # 定时前进持续时间（秒）
@@ -75,10 +73,16 @@ class AutoNavNode(Node):
 
         # ===== 控制循环 10Hz =====
         self.timer = self.create_timer(0.1, self.control_loop)
+        # ===== 记录是否进入b情况 =====
+        self.status = 0
 
     # 辅助函数：裁剪前进速度到 [v_min, v_max]
-    def clip_speed(self, speed: float) -> float:
-        return min(self.v_max, speed)
+    def clip_speed(self, speed: float, max: float) -> float:
+        if abs(speed) < abs(max):
+            return speed
+        if abs(speed) > abs(max):
+            return max if speed > 0 else -max
+        return 0.0
 
     # 发布运动控制消息
     def generate_msgs(self, forward: float, left: float, up: float):
@@ -86,7 +90,7 @@ class AutoNavNode(Node):
         self.ctrl_msg.value.left = left
         self.ctrl_msg.value.up = up
         self.publisher.publish(self.ctrl_msg)
-        self.get_logger().debug(f"CMD: Fwd={forward:.2f}, roll={roll:.2f}, Up={up:.2f}")
+        self.get_logger().debug(f"CMD: Fwd={forward:.2f}, left={left:.2f}, Up={up:.2f}")
 
     # 停止运动并安全关闭节点
     def shutdown_node(self):
@@ -97,49 +101,27 @@ class AutoNavNode(Node):
 
     # 主控制逻辑循环
     def control_loop(self):
-        """ # 1️⃣ 未检测到机器人和电磁铁时，原地顺时针旋转
-        if (0 not in self.target_z_dict) and (1 not in self.target_z_dict):
-            self.get_logger().info("No robot or magnet detected. Rotating.")
+        # 1️⃣ 未检测到机器人和电磁铁时，原地顺时针旋转
+        if not self.current_detection :
+            self.get_logger().info("No magnet detected. Rotating.")
             self.generate_msgs(0.0, -self.rotate_speed, 0.0)
-            return """
-
+            return
         # 获取目标距离信息
-        robot_z = self.target_z_dict.get(1, 0.0)
-        magnet_z = self.target_z_dict.get(0, 0.0)
-        robot_x = self.target_x_dict.get(1, 0.0)
-        magnet_x = self.target_x_dict.get(0, 0.0)
+        # robot_z = self.target_z_dict.get(1, 0.0)
+        # robot_x = self.target_x_dict.get(1, 0.0)
+        magnet_z = self.target_z
+        magnet_x = self.target_x - self.target_z * 0.01 - 5 # 目标 x 坐标修正
 
-        # 3️⃣ 情况 C：当机器人距离在 (0, 1.0)m 且检测到电磁铁时
-        if 0 < magnet_z < 2.0:
-            self.get_logger().warn("C condition occur")
-            # 使用电磁铁距离计算前进速度并裁剪
-            forward_speed = self.clip_speed(self.kp * magnet_z)
-            roll_cmd = self.kp_x*magnet_x if self.current_detection else 0.0
-            self.get_logger().info(f"[C] Robot@{robot_z:.2f}m + Magnet@{magnet_z:.2f}m → Forward = {forward_speed:.2f} m/s, Left = {roll_cmd:.2f} m/s")
-            self.generate_msgs(forward_speed, roll_cmd, 0.0)
-            return
-        
-        # 2️⃣ 情况 A：当机器人距离 > 0.8m 时
-        if robot_z >= 1.0:
-            self.get_logger().warn("A condition occur")
-            # 使用机器人距离计算前进速度并裁剪
-            forward_speed = self.clip_speed(self.kp * robot_z)
-            # 结合目标 x 坐标进行左右修正
-            roll_cmd = -self.kp_x*robot_x if self.current_detection else 0.0
-            self.get_logger().info(f"[A] Robot far ({robot_z:.2f}m). Forward = {forward_speed:.2f} m/s, Roll = {roll_cmd:.2f} m/s")
-            self.generate_msgs(forward_speed, roll_cmd, 0.0)
-            return
-
-
-        # 4️⃣ 情况 B：当机器人距离在 (0, 0.3)m 且未检测到电磁铁时（不进行左右调整）
-        if 0 < robot_z < 0.5 and magnet_z == 0:
+        # 4️⃣ 情况 B：当机器人距离在 (0, 0.5)m 且未检测到电磁铁时（不进行左右调整）
+        if 0< magnet_z < 50 and self.current_detection and self.status == 0:
+            self.status = 1
             self.get_logger().warn("B condition occur")
             self.forward_speed = 0.05  # 固定前进速度
-            self.required_duration = 3.0  # 定时 5 秒
+            self.required_duration = 4.0  # 定时
             self.forward_start_time = self.get_clock().now()
+            self.get_logger().info("[B] Too close (<0.5m) and no magnet. ")
             self.is_forwarding = True
-            self.get_logger().info("[B] Too close (<0.3m) and no magnet. Forcing forward 5s at 0.2 m/s (no lateral adjustment).")
-            self.generate_msgs(self.forward_speed, 0.0, 0.0)
+            # self.generate_msgs(self.forward_speed, 0.0, 0.0)
             return
 
         # 定时前进过程（情况 B 正在进行）
@@ -148,10 +130,34 @@ class AutoNavNode(Node):
             if elapsed < self.required_duration:
                 self.generate_msgs(self.forward_speed, 0.0, 0.0)
             else:
-                # self.generate_msgs(0.0, 0.0, 0.0)
-                self.shutdown_node()
-                # self.is_forwarding = False
+                self.generate_msgs(0.0, 0.0, 0.0)
+                self.get_logger().info(f"[B] Forwarding completed ")
+                self.is_forwarding = False
             return
+
+        # 3️⃣ 情况 A：当机器人距离在 (0, 1.0)m 且检测到电磁铁时
+        if 50 <= magnet_z < 300:
+            self.get_logger().warn("A condition occur")
+            self.status = 0
+            # 使用电磁铁距离计算前进速度并裁剪
+            forward_speed = self.clip_speed(self.kp * magnet_z, self.v_max)
+            left_cmd = -self.clip_speed(self.kp * magnet_x, self.r_max) if self.current_detection else 0.0
+            self.get_logger().info(f"[A] Magnet@{magnet_z:.2f}m → Forward = {forward_speed:.2f} m/s, Left = {left_cmd:.2f} m/s")
+            self.generate_msgs(forward_speed, left_cmd, 0.0)
+            return
+        """         
+        # 2️⃣ 情况 A：当机器人距离 > 0.8m 时
+        if magnet_z >=:
+            self.get_logger().warn("A condition occur")
+            # 使用机器人距离计算前进速度并裁剪
+            forward_speed = self.clip_speed(self.kp * magnet_z, self.v_max)
+            # 结合目标 x 坐标进行左右修正
+            left_cmd = -self.clip_speed(self.kp * magnet_z, self.r_max) if self.current_detection else 0.0
+            self.get_logger().info(f"[A] Robot far ({magnet_z:.2f}m). Forward = {forward_speed:.2f} m/s, left = {left_cmd:.2f} m/s")
+            self.generate_msgs(forward_speed, left_cmd, 0.0)
+            return
+
+        """
 
         """  # 5️⃣ fallback 跟踪控制：当检测到目标但不满足前述条件时
         if self.current_detection:
@@ -180,6 +186,7 @@ class AutoNavNode(Node):
                 if not hasattr(result, 'class_id') or not hasattr(result, 'coordinate'):
                     self.get_logger().warn("Invalid detection result structure")
                     continue
+                self.current_detection = result  # 更新当前检测结果
 
                 class_id = int(result.class_id)
                 coordinates = result.coordinate
@@ -190,9 +197,9 @@ class AutoNavNode(Node):
                     continue
 
                 # 更新目标字典
-                self.target_x_dict[class_id] = float(coordinates[0])
-                self.target_y_dict[class_id] = float(coordinates[1])
-                self.target_z_dict[class_id] = float(coordinates[2])
+                self.target_x = float(coordinates[0])
+                self.target_y = float(coordinates[1])
+                self.target_z = float(coordinates[2])
 
                 # 记录检测信息（使用DEBUG级别减少日志量）
                 self.get_logger().debug(
