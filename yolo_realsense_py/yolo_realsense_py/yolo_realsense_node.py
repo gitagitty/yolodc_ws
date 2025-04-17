@@ -18,7 +18,7 @@ class YOLORealsenseNode(Node):
         self.get_logger().info(f'Using device: {self.device}')
 
         # 加载 YOLOv11 模型
-        self.model = YOLO('/home/evan/yolodc_ws/src/yolodc_ws/model/best.pt')  # 使用 YOLO 类加载
+        self.model = YOLO('/home/evan/yolodc_ws/src/yolodc_ws/model/yolov8n.pt')  # 使用 YOLO 类加载
         self.model.to(self.device)  # 移动到指定设备（CPU/GPU）
         self.model.eval()  # 设置为推理模式
 
@@ -93,7 +93,7 @@ class YOLORealsenseNode(Node):
                     if confidence > 0.8:  
                         # 计算中心点
                         center_x = int((x1 + x2) / 2) - 320
-                        center_y = int((y1 + y2) / 2) - 320
+                        center_y = int((y1 + y2) / 2) - 320 
 
                         # 获取深度值
                         depth = self.latest_depth_image[center_y, center_x] / 1000.0  # 转换为米
@@ -101,17 +101,13 @@ class YOLORealsenseNode(Node):
                             self.get_logger().warn('Depth value is zero.')
                             continue """
                         # 发布自定义消息
-                        detection_msg = DetectionResult()
-                        detection_msg.class_id = int(class_id)
-                        detection_msg.confidence = float(confidence)
-                        detection_msg.center = Point(x=float(center_x), y=float(center_y), z=float(depth))
-
-                        self.detection_publisher.publish(detection_msg)
-
-                        self.get_logger().info(
-                            f'Detected: Class ID: {class_id}, Confidence: {confidence:.2f}, '
-                            f'Center: ({center_x}, {center_y}, {depth:.2f})'
-            )
+                        if depth != 0:
+                            detection_msg = DetectionResult()
+                            detection_msg.class_id = int(class_id)
+                            detection_msg.confidence = float(confidence)
+                            detection_msg.center = Point(x=float(center_x), y=float(center_y), z=float(depth))
+                            self.detection_publisher.publish(detection_msg)
+                            # self.get_logger().info(f'Detected class {int(class_id)} ({center_x}, {center_y}, {depth})')
 
 def main(args=None):
     rclpy.init(args=args)

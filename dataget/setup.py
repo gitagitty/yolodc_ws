@@ -20,8 +20,8 @@ setup(
     tests_require=['pytest'],
     entry_points={
      'console_scripts': [
-     'xyzk_node = dataget.yolozk_xykp:main',
-     'xzk_node = dataget.yolozk_xkp:main',
+     'xzzk_node = dataget.yolozk_xzkp:main',
+     'zzk_node = dataget.yolozk_zkp:main',
         ],
     },
 )
