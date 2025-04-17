@@ -54,13 +54,13 @@ class AutoNavNode(Node):
         # ===== 控制参数 =====
         self.ctrl_msg = MotionCtrl()
         self.kp = 0.01            # 前进比例控制增益（用于计算 forward = kp * distance）
-        self.kp_x = 0.001         # x方向横向控制增益（用于计算 left = -kp_x * target_x）
+        self.kp_x = 0.01         # x方向横向控制增益（用于计算 left = -kp_x * target_x）
         # self.v_min = 0.05         # 最小前进速度（m/s）
-        self.v_max = 0.3        # 最大前进速度（m/s）
+        self.v_max = 0.15        # 最大前进速度（m/s）
         self.turn_gain = 0.05     # 左右修正增益（备用控制）
         self.leg_gain = 0.8       # 上下修正增益（备用控制）
         self.rotate_speed = 0.03   # 原地旋转速度
-        self.r_max = 0.07
+        self.r_max = 0.05        # 最大左右修正速度（m/s）
 
         # ===== 目标检测数据缓存 =====
         self.current_detection = None
@@ -113,11 +113,11 @@ class AutoNavNode(Node):
         magnet_x = self.target_x - self.target_z * 0.01 - 5 # 目标 x 坐标修正
 
         # 4️⃣ 情况 B：当机器人距离在 (0, 0.5)m 且未检测到电磁铁时（不进行左右调整）
-        if 0< magnet_z < 50 and self.current_detection and self.status == 0:
+        if 0< magnet_z < 55 and self.current_detection and self.status == 0:
             self.status = 1
             self.get_logger().warn("B condition occur")
-            self.forward_speed = 0.05  # 固定前进速度
-            self.required_duration = 4.0  # 定时
+            self.forward_speed = 0.1  # 固定前进速度
+            self.required_duration = 5.0  # 定时
             self.forward_start_time = self.get_clock().now()
             self.get_logger().info("[B] Too close (<0.5m) and no magnet. ")
             self.is_forwarding = True
@@ -136,13 +136,13 @@ class AutoNavNode(Node):
             return
 
         # 3️⃣ 情况 A：当机器人距离在 (0, 1.0)m 且检测到电磁铁时
-        if 50 <= magnet_z < 300:
+        if 55 <= magnet_z < 300:
             self.get_logger().warn("A condition occur")
             self.status = 0
             # 使用电磁铁距离计算前进速度并裁剪
             forward_speed = self.clip_speed(self.kp * magnet_z, self.v_max)
-            left_cmd = -self.clip_speed(self.kp * magnet_x, self.r_max) if self.current_detection else 0.0
-            self.get_logger().info(f"[A] Magnet@{magnet_z:.2f}m → Forward = {forward_speed:.2f} m/s, Left = {left_cmd:.2f} m/s")
+            left_cmd = -self.clip_speed(self.kp_x * magnet_x, self.r_max) if self.current_detection else 0.0
+            self.get_logger().info(f"[A] Magnet@{magnet_z:.2f}cm → Forward = {forward_speed:.2f} cm/s, Left = {left_cmd:.2f} m/s")
             self.generate_msgs(forward_speed, left_cmd, 0.0)
             return
         """         
