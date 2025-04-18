@@ -54,13 +54,13 @@ class AutoNavNode(Node):
         # ===== 控制参数 =====
         self.ctrl_msg = MotionCtrl()
         self.kp = 0.01            # 前进比例控制增益（用于计算 forward = kp * distance）
-        self.kp_x = 0.01         # x方向横向控制增益（用于计算 left = -kp_x * target_x）
+        self.kp_x = 0.01         # 转弯比例控制增益（用于计算 left = -kp_x * target_x）
         # self.v_min = 0.05         # 最小前进速度（m/s）
-        self.v_max = 0.15        # 最大前进速度（m/s）
+        self.v_max = 0.25        # 最大前进速度（m/s）
         self.turn_gain = 0.05     # 左右修正增益（备用控制）
         self.leg_gain = 0.8       # 上下修正增益（备用控制）
-        self.rotate_speed = 0.03   # 原地旋转速度
-        self.r_max = 0.05        # 最大左右修正速度（m/s）
+        self.rotate_speed = 0.1   # 原地旋转速度
+        self.r_max = 0.1        # 最大左右修正速度（m/s）
 
         # ===== 目标检测数据缓存 =====
         self.current_detection = None
@@ -93,11 +93,11 @@ class AutoNavNode(Node):
         self.get_logger().debug(f"CMD: Fwd={forward:.2f}, left={left:.2f}, Up={up:.2f}")
 
     # 停止运动并安全关闭节点
-    def shutdown_node(self):
+    """ def shutdown_node(self):
         self.get_logger().info("Mission complete. Stopping and shutting down.")
         self.generate_msgs(0.0, 0.0, 0.0)
         self.destroy_node()
-        rclpy.shutdown()
+        rclpy.shutdown() """
 
     # 主控制逻辑循环
     def control_loop(self):
@@ -142,7 +142,7 @@ class AutoNavNode(Node):
             # 使用电磁铁距离计算前进速度并裁剪
             forward_speed = self.clip_speed(self.kp * magnet_z, self.v_max)
             left_cmd = -self.clip_speed(self.kp_x * magnet_x, self.r_max) if self.current_detection else 0.0
-            self.get_logger().info(f"[A] Magnet@{magnet_z:.2f}cm → Forward = {forward_speed:.2f} cm/s, Left = {left_cmd:.2f} m/s")
+            self.get_logger().info(f"[A] Magnet@{magnet_z:.2f}cm → Forward = {forward_speed:.2f} m/s, Left = {left_cmd:.2f} m/s")
             self.generate_msgs(forward_speed, left_cmd, 0.0)
             return
         """         
