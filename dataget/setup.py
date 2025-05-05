@@ -21,6 +21,7 @@ setup(
     entry_points={
      'console_scripts': [
      'xzzk_node = dataget.yolozk_xzkp:main',
+     'filter_node = dataget.filterzk:main',
         ],
     },
 )
