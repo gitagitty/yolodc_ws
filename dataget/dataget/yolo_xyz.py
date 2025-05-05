@@ -39,7 +39,9 @@ class AutoNavNode(Node):
         self.ctrl_msg = MotionCtrl()
         self.kp = 0.01            # 前进比例控制增益
         self.kp_x = 0.01         # 转弯比例控制增益
-        self.v_max = 0.2        # 最大前进速度（m/s）
+        self.kp_y = 0.01 
+        self.vy_max = 0.2        # 最大垂直速度
+        self.vx_max = 0.2        # 最大前进速度（m/s）
         self.turn_gain = 0.05     # 左右修正增益（备用控制）
         self.leg_gain = 0.8       # 上下修正增益（备用控制）
         self.rotate_speed = 0.1   # 原地旋转速度
@@ -58,6 +60,7 @@ class AutoNavNode(Node):
             initial_value=0.0
         )
         self.filtered_x = 0.0
+        self.filtered_y = 0.0
         self.filtered_z = 0.0
         
         # ===== 定时前进控制参数 =====
@@ -89,9 +92,10 @@ class AutoNavNode(Node):
             self.generate_msgs(0.0, -self.rotate_speed, 0.0)
             return
             
-        magnet_z = self.filtered_z  # 使用卡尔曼滤波后的z值
+        magnet_z = self.target_z
         # 使用卡尔曼滤波后的x值
         magnet_x = self.filtered_x - self.target_z * 0.01 - 5  # 目标 x 坐标修正
+        magnet_y = self.filtered_y - self.target_z * 0.01 - 5  # 目标 x 坐标修正
 
         if 0 < magnet_z < 55 and self.current_detection and self.status == 0:
             self.status = 1
@@ -116,7 +120,7 @@ class AutoNavNode(Node):
         if 55 <= magnet_z < 300:
             self.get_logger().warn("A condition occur")
             self.status = 0
-            forward_speed = self.clip_speed(self.kp * magnet_z, self.v_max)
+            forward_speed = self.clip_speed(self.kp * magnet_z, self.vx_max)
             left_cmd = -self.clip_speed(self.kp_x * magnet_x, self.r_max) if self.current_detection else 0.0
             self.get_logger().info(f"[A] Magnet@{magnet_z:.2f}cm → Forward = {forward_speed:.2f} m/s, Left = {left_cmd:.2f} m/s")
             self.generate_msgs(forward_speed, left_cmd, 0.0)
@@ -143,19 +147,21 @@ class AutoNavNode(Node):
 
                 # 原始x坐标
                 raw_x = float(coordinates[0])
+                raw_y = float(coordinates[1])
                 raw_z = float(coordinates[2])
+
                 # 使用卡尔曼滤波更新x坐标
                 self.filtered_x = self.kalman_filter.update(raw_x)
+                self.filtered_y = self.kalman_filter.update(raw_y)
                 self.filtered_z = self.kalman_filter.update(raw_z)
-                
                 self.target_x = raw_x  # 仍然保留原始值用于记录
-                self.target_y = float(coordinates[1])
+                self.target_y = raw_y
                 self.target_z = raw_z
 
                 self.get_logger().debug(
                     f"[DETECT] Class {class_id}: "
                     f"x={coordinates[0]:.2f}(filtered={self.filtered_x:.2f}), "
-                    f"y={coordinates[1]:.2f}, "
+                    f"y={coordinates[1]:.2f}(filtered={self.filtered_y:.2f}), "
                     f"z={coordinates[2]:.2f}(filtered={self.filtered_z:.2f})"
                 )
             except (ValueError, TypeError) as e:
