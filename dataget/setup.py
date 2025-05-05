@@ -22,6 +22,7 @@ setup(
      'console_scripts': [
      'xzzk_node = dataget.yolozk_xzkp:main',
      'filter_node = dataget.filterzk:main',
+     'yoloxyz_node = dataget.yolo_xyz:main',
         ],
     },
 )

@@ -4,6 +4,9 @@ from motion_msgs.msg import MotionCtrl
 from tensorrt_yolo_msg.msg import Results
 import numpy as np
 
+
+""" 还需要设置和调试：理想x值，卡尔曼误差系数 """
+
 class KalmanFilter1D:
     """一维卡尔曼滤波器"""
     def __init__(self, process_variance=1.0, measurement_variance=1.0, initial_value=0.0):

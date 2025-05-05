@@ -4,6 +4,8 @@ from motion_msgs.msg import MotionCtrl
 from tensorrt_yolo_msg.msg import Results
 import numpy as np
 
+""" 还需要设置和调试：理想x值，理想y值，卡尔曼误差系数 """
+
 class KalmanFilter1D:
     """一维卡尔曼滤波器"""
     def __init__(self, process_variance=1.0, measurement_variance=1.0, initial_value=0.0):
@@ -25,7 +27,7 @@ class KalmanFilter1D:
 
 class AutoNavNode(Node):
     def __init__(self):
-        super().__init__('filter_node')
+        super().__init__('yoloxyz_node')
 
         # ===== ROS 通信接口 =====
         self.publisher = self.create_publisher(MotionCtrl, '/diablo/MotionCmd', 2)
@@ -40,7 +42,7 @@ class AutoNavNode(Node):
         self.kp = 0.01            # 前进比例控制增益
         self.kp_x = 0.01         # 转弯比例控制增益
         self.kp_y = 0.01 
-        self.vy_max = 0.2        # 最大垂直速度
+        self.vy_max = 0.05        # 最大垂直速度
         self.vx_max = 0.2        # 最大前进速度（m/s）
         self.turn_gain = 0.05     # 左右修正增益（备用控制）
         self.leg_gain = 0.8       # 上下修正增益（备用控制）
@@ -51,7 +53,8 @@ class AutoNavNode(Node):
         self.current_detection = None
         self.target_x = 0.00  
         self.target_y = 0.00
-        self.target_z = 0.00 
+        self.target_z = 0.00
+        self.up_cmd = 0.0 
         
         # ===== 卡尔曼滤波器 =====
         self.kalman_filter = KalmanFilter1D(
@@ -79,23 +82,39 @@ class AutoNavNode(Node):
             return max if speed > 0 else -max
         return 0.0
 
-    def generate_msgs(self, forward: float, left: float, up: float):
+    def xz_msgs(self, forward: float, left: float):
+        self.ctrl_msg.value.forward = forward
+        self.ctrl_msg.value.left = left
+        self.publisher.publish(self.ctrl_msg)
+        self.get_logger().debug(f"CMD: Fwd={forward:.2f}, left={left:.2f}")
+
+    def xyz_msgs(self, forward: float, left: float, up: float):
         self.ctrl_msg.value.forward = forward
         self.ctrl_msg.value.left = left
         self.ctrl_msg.value.up = up
         self.publisher.publish(self.ctrl_msg)
         self.get_logger().debug(f"CMD: Fwd={forward:.2f}, left={left:.2f}, Up={up:.2f}")
 
+    def init_msgs(self, mode_mark: bool, stand_mode: bool, up: float):
+        self.ctrl_msg.mode_mark = mode_mark
+        self.ctrl_msg.stand_mode = stand_mode
+        self.ctrl_msg.value.up = up
+        self.publisher.publish(self.ctrl_msg)
+        self.get_logger().warn(f"CMD: mode_mark={mode_mark}, stand_mode={stand_mode}, Up={up:.2f}")
+    
     def control_loop(self):
         if not self.current_detection:
             self.get_logger().info("No magnet detected. Rotating.")
-            self.generate_msgs(0.0, -self.rotate_speed, 0.0)
+            self.xz_msgs(0.0, -self.rotate_speed)
             return
-            
+
+
         magnet_z = self.target_z
         # 使用卡尔曼滤波后的x值
         magnet_x = self.filtered_x - self.target_z * 0.01 - 5  # 目标 x 坐标修正
-        magnet_y = self.filtered_y - self.target_z * 0.01 - 5  # 目标 x 坐标修正
+        magnet_y = self.filtered_y   # 目标 y 坐标修正
+
+        self.init_msgs(True,True,self.up_cmd)
 
         if 0 < magnet_z < 55 and self.current_detection and self.status == 0:
             self.status = 1
@@ -110,20 +129,30 @@ class AutoNavNode(Node):
         if self.is_forwarding:
             elapsed = (self.get_clock().now() - self.forward_start_time).nanoseconds / 1e9
             if elapsed < self.required_duration:
-                self.generate_msgs(self.forward_speed, 0.0, 0.0)
+                self.xz_msgs(self.forward_speed, 0.0)
             else:
-                self.generate_msgs(0.0, 0.0, 0.0)
+                self.xz_msgs(0.0, 0.0)
                 self.get_logger().info(f"[B] Forwarding completed ")
                 self.is_forwarding = False
             return
 
-        if 55 <= magnet_z < 300:
+        if 55 <= magnet_z < 100:
+            self.get_logger().warn("A condition occur")
+            self.status = 0
+            forward_speed = self.clip_speed(self.kp * magnet_z, self.vx_max)
+            left_cmd = -self.clip_speed(self.kp_x * magnet_x, self.r_max) if self.current_detection else 0.0
+            self.up_cmd = self.up_cmd + self.clip_speed(self.kp_y * magnet_y, self.vy_max)
+            self.get_logger().info(f"[A] Magnet@{magnet_z:.2f}cm → Forward = {forward_speed:.2f} m/s, Left = {left_cmd:.2f} m/s, Up = {self.up_cmd:.2f}")
+            self.xyz_msgs(forward_speed, left_cmd,self.up_cmd)
+            return
+        
+        if 100 <= magnet_z < 300:
             self.get_logger().warn("A condition occur")
             self.status = 0
             forward_speed = self.clip_speed(self.kp * magnet_z, self.vx_max)
             left_cmd = -self.clip_speed(self.kp_x * magnet_x, self.r_max) if self.current_detection else 0.0
             self.get_logger().info(f"[A] Magnet@{magnet_z:.2f}cm → Forward = {forward_speed:.2f} m/s, Left = {left_cmd:.2f} m/s")
-            self.generate_msgs(forward_speed, left_cmd, 0.0)
+            self.xz_msgs(forward_speed, left_cmd)
             return
 
     def target_callback(self, msg: Results):
