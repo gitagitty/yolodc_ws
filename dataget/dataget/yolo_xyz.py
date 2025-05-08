@@ -4,7 +4,7 @@ from motion_msgs.msg import MotionCtrl
 from tensorrt_yolo_msg.msg import Results
 import numpy as np
 
-""" 还需要设置和调试：理想x值，理想y值，卡尔曼误差系数 """
+""" 还需要设置和调试:理想x值,理想y值,卡尔曼误差系数 """
 
 class KalmanFilter1D:
     """一维卡尔曼滤波器"""
@@ -48,6 +48,7 @@ class AutoNavNode(Node):
         self.leg_gain = 0.8       # 上下修正增益（备用控制）
         self.rotate_speed = 0.1   # 原地旋转速度
         self.r_max = 0.05      # 最大左右修正速度（m/s）
+        self.forward_speed = 0.0
 
         # ===== 目标检测数据缓存 =====
         self.current_detection = None
@@ -71,6 +72,9 @@ class AutoNavNode(Node):
         self.required_duration = 0.0
         self.is_forwarding = False
         self.status = 0
+
+        # ===== 控制模式标志位 =====
+        self.init_msgs(True,True,self.up_cmd)
 
         # ===== 控制循环 10Hz =====
         self.timer = self.create_timer(0.1, self.control_loop)
@@ -114,7 +118,6 @@ class AutoNavNode(Node):
         magnet_x = self.filtered_x - self.target_z * 0.01 - 5  # 目标 x 坐标修正
         magnet_y = self.filtered_y   # 目标 y 坐标修正
 
-        self.init_msgs(True,True,self.up_cmd)
 
         if 0 < magnet_z < 55 and self.current_detection and self.status == 0:
             self.status = 1

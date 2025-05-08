@@ -3,9 +3,8 @@ from rclpy.node import Node
 from motion_msgs.msg import MotionCtrl
 from tensorrt_yolo_msg.msg import Results
 import numpy as np
-
-
-""" 还需要设置和调试：理想x值，卡尔曼误差系数 """
+import csv
+import time
 
 class KalmanFilter1D:
     """一维卡尔曼滤波器"""
@@ -68,6 +67,10 @@ class AutoNavNode(Node):
         self.required_duration = 0.0
         self.is_forwarding = False
         self.status = 0
+
+        # ===== 数据记录 =====
+        self.data_records = []
+        self.start_time = time.time()
 
         # ===== 控制循环 10Hz =====
         self.timer = self.create_timer(0.1, self.control_loop)
@@ -155,6 +158,14 @@ class AutoNavNode(Node):
                 self.target_y = float(coordinates[1])
                 self.target_z = raw_z
 
+                # 记录数据
+                current_time = time.time() - self.start_time
+                self.data_records.append({
+                    'time': current_time,
+                    'raw_x': raw_x,
+                    'filtered_x': self.filtered_x
+                })
+
                 self.get_logger().debug(
                     f"[DETECT] Class {class_id}: "
                     f"x={coordinates[0]:.2f}(filtered={self.filtered_x:.2f}), "
@@ -166,13 +177,25 @@ class AutoNavNode(Node):
             except Exception as e:
                 self.get_logger().error(f"Unexpected error: {str(e)}", throttle_duration_sec=5)
 
+    def save_data_to_csv(self, filename=None):
+    if filename is None:
+        import os
+        filename = os.path.join(os.getcwd(), 'filtered_data.csv')  # 默认当前目录
+    
+    with open(filename, mode='w', newline='') as file:
+        writer = csv.DictWriter(file, fieldnames=['time', 'raw_x', 'filtered_x'])
+        writer.writeheader()
+        for record in self.data_records:
+            writer.writerow(record)
+    self.get_logger().info(f"Data saved to {filename}")
+
 def main(args=None):
     rclpy.init(args=args)
     node = AutoNavNode()
     try:
         rclpy.spin(node)
     except KeyboardInterrupt:
-        pass
+        node.save_data_to_csv()  # 保存数据到CSV文件
     finally:
         if rclpy.ok():
             node.destroy_node()

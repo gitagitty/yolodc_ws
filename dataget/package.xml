@@ -11,6 +11,8 @@
   <depend>std_msgs</depend>
   <depend>sensor_msgs</depend>
   <depend>numpy</depend>
+  <depend>csv</depend>
+  <depend>time</depend>
 
 
   <test_depend>ament_copyright</test_depend>
