@@ -12,7 +12,7 @@ class KalmanFilter1D:
         self.process_variance = process_variance  # 过程噪声
         self.measurement_variance = measurement_variance  # 测量噪声
         self.estimate = initial_value  # 初始估计值
-        self.estimate_error = 1.0  # 初始估计误差
+        self.estimate_error = 0.0  # 初始估计误差
     
     def update(self, measurement):
         # 预测步骤
@@ -24,6 +24,21 @@ class KalmanFilter1D:
         self.estimate_error = (1 - kalman_gain) * prediction_error
         
         return self.estimate
+    
+class lowpass_filter:
+    def __init__(self, alpha=0.01):
+        self.alpha = alpha
+        self.last_value = None
+
+    def update(self, value):
+        if self.last_value is None:
+            self.last_value = value
+        else:
+            # 保持符号与测量值一致
+            sign = -1 if value < 0 else 1
+            self.last_value = (1 - self.alpha) * self.last_value + self.alpha * value
+            # self.last_value = sign * abs(self.last_value)  # 强制符号匹配
+        return self.last_value
 
 class AutoNavNode(Node):
     def __init__(self):
@@ -55,12 +70,13 @@ class AutoNavNode(Node):
         
         # ===== 卡尔曼滤波器 =====
         self.kalman_filter = KalmanFilter1D(
-            process_variance=3.0,    # 过程噪声，根据目标运动速度调整
-            measurement_variance=2.0, # 测量噪声，根据传感器精度调整
+            process_variance=1.0,    # 过程噪声，根据目标运动速度调整
+            measurement_variance=5.0, # 测量噪声，根据传感器精度调整
             initial_value=0.0
         )
-        self.filtered_x = 0.0
-        self.filtered_z = 0.0
+
+        # ===== 低通滤波器 =====
+        self.lowpass_filter = lowpass_filter(alpha=0.1)  # 低通滤波器实例
         
         # ===== 定时前进控制参数 =====
         self.forward_start_time = None
@@ -95,9 +111,9 @@ class AutoNavNode(Node):
             self.generate_msgs(0.0, -self.rotate_speed, 0.0)
             return
             
-        magnet_z = self.filtered_z  # 使用卡尔曼滤波后的z值
+        magnet_z = self.target_z 
         # 使用卡尔曼滤波后的x值
-        magnet_x = self.filtered_x - self.target_z * 0.01 - 5  # 目标 x 坐标修正
+        magnet_x = self.filtered_x - magnet_z * 0.01 - 6.0  # 目标 x 坐标修正
 
         if 0 < magnet_z < 55 and self.current_detection and self.status == 0:
             self.status = 1
@@ -149,14 +165,13 @@ class AutoNavNode(Node):
 
                 # 原始x坐标
                 raw_x = float(coordinates[0])
-                raw_z = float(coordinates[2])
+                # raw_z = float(coordinates[2])
                 # 使用卡尔曼滤波更新x坐标
                 self.filtered_x = self.kalman_filter.update(raw_x)
-                self.filtered_z = self.kalman_filter.update(raw_z)
                 
                 self.target_x = raw_x  # 仍然保留原始值用于记录
                 self.target_y = float(coordinates[1])
-                self.target_z = raw_z
+                self.target_z = float(coordinates[2])
 
                 # 记录数据
                 current_time = time.time() - self.start_time
@@ -170,7 +185,7 @@ class AutoNavNode(Node):
                     f"[DETECT] Class {class_id}: "
                     f"x={coordinates[0]:.2f}(filtered={self.filtered_x:.2f}), "
                     f"y={coordinates[1]:.2f}, "
-                    f"z={coordinates[2]:.2f}(filtered={self.filtered_z:.2f})"
+                    f"z={coordinates[2]:.2f}"
                 )
             except (ValueError, TypeError) as e:
                 self.get_logger().error(f"Data processing error: {str(e)}")
@@ -178,16 +193,16 @@ class AutoNavNode(Node):
                 self.get_logger().error(f"Unexpected error: {str(e)}", throttle_duration_sec=5)
 
     def save_data_to_csv(self, filename=None):
-    if filename is None:
-        import os
-        filename = os.path.join(os.getcwd(), 'filtered_data.csv')  # 默认当前目录
+        if filename is None:
+            import os
+            filename = os.path.join(os.getcwd(), 'filtered_data.csv')  # 默认当前目录
     
-    with open(filename, mode='w', newline='') as file:
-        writer = csv.DictWriter(file, fieldnames=['time', 'raw_x', 'filtered_x'])
-        writer.writeheader()
-        for record in self.data_records:
-            writer.writerow(record)
-    self.get_logger().info(f"Data saved to {filename}")
+        with open(filename, mode='w', newline='') as file:
+            writer = csv.DictWriter(file, fieldnames=['time', 'raw_x', 'filtered_x'])
+            writer.writeheader()
+            for record in self.data_records:
+                writer.writerow(record)
+        self.get_logger().info(f"Data saved to {filename}")
 
 def main(args=None):
     rclpy.init(args=args)

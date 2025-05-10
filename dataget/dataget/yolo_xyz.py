@@ -58,7 +58,12 @@ class AutoNavNode(Node):
         self.up_cmd = 0.0 
         
         # ===== 卡尔曼滤波器 =====
-        self.kalman_filter = KalmanFilter1D(
+        self.kalman_filter_x = KalmanFilter1D(
+            process_variance=3.0,    # 过程噪声，根据目标运动速度调整
+            measurement_variance=2.0, # 测量噪声，根据传感器精度调整
+            initial_value=0.0
+        )
+        self.kalman_filter_y = KalmanFilter1D(
             process_variance=3.0,    # 过程噪声，根据目标运动速度调整
             measurement_variance=2.0, # 测量噪声，根据传感器精度调整
             initial_value=0.0
@@ -101,7 +106,7 @@ class AutoNavNode(Node):
 
     def init_msgs(self, mode_mark: bool, stand_mode: bool, up: float):
         self.ctrl_msg.mode_mark = mode_mark
-        self.ctrl_msg.stand_mode = stand_mode
+        self.ctrl_msg.mode.stand_mode = stand_mode
         self.ctrl_msg.value.up = up
         self.publisher.publish(self.ctrl_msg)
         self.get_logger().warn(f"CMD: mode_mark={mode_mark}, stand_mode={stand_mode}, Up={up:.2f}")
@@ -115,7 +120,7 @@ class AutoNavNode(Node):
 
         magnet_z = self.target_z
         # 使用卡尔曼滤波后的x值
-        magnet_x = self.filtered_x - self.target_z * 0.01 - 5  # 目标 x 坐标修正
+        magnet_x = self.filtered_x - magnet_z * 0.01 - 5  # 目标 x 坐标修正
         magnet_y = self.filtered_y   # 目标 y 坐标修正
 
 
@@ -139,7 +144,7 @@ class AutoNavNode(Node):
                 self.is_forwarding = False
             return
 
-        if 55 <= magnet_z < 100:
+        if 55 <= magnet_z < 150:
             self.get_logger().warn("A condition occur")
             self.status = 0
             forward_speed = self.clip_speed(self.kp * magnet_z, self.vx_max)
@@ -149,7 +154,7 @@ class AutoNavNode(Node):
             self.xyz_msgs(forward_speed, left_cmd,self.up_cmd)
             return
         
-        if 100 <= magnet_z < 300:
+        if 150 <= magnet_z < 300:
             self.get_logger().warn("A condition occur")
             self.status = 0
             forward_speed = self.clip_speed(self.kp * magnet_z, self.vx_max)
@@ -180,21 +185,19 @@ class AutoNavNode(Node):
                 # 原始x坐标
                 raw_x = float(coordinates[0])
                 raw_y = float(coordinates[1])
-                raw_z = float(coordinates[2])
 
                 # 使用卡尔曼滤波更新x坐标
-                self.filtered_x = self.kalman_filter.update(raw_x)
-                self.filtered_y = self.kalman_filter.update(raw_y)
-                self.filtered_z = self.kalman_filter.update(raw_z)
+                self.filtered_x = self.kalman_filter_x.update(raw_x)
+                self.filtered_y = self.kalman_filter_y.update(raw_y)
                 self.target_x = raw_x  # 仍然保留原始值用于记录
                 self.target_y = raw_y
-                self.target_z = raw_z
+                self.target_z = float(coordinates[2])
 
                 self.get_logger().debug(
                     f"[DETECT] Class {class_id}: "
                     f"x={coordinates[0]:.2f}(filtered={self.filtered_x:.2f}), "
                     f"y={coordinates[1]:.2f}(filtered={self.filtered_y:.2f}), "
-                    f"z={coordinates[2]:.2f}(filtered={self.filtered_z:.2f})"
+                    f"z={coordinates[2]:.2f}"
                 )
             except (ValueError, TypeError) as e:
                 self.get_logger().error(f"Data processing error: {str(e)}")
