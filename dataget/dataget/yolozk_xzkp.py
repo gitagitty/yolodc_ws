@@ -38,10 +38,13 @@ import rclpy
 from rclpy.node import Node
 from motion_msgs.msg import MotionCtrl
 from tensorrt_yolo_msg.msg import Results
+import time
 
 class AutoNavNode(Node):
     def __init__(self):
         super().__init__('xzzk_node')
+
+        time.sleep(3)
 
         # ===== ROS 通信接口 =====
         self.publisher = self.create_publisher(MotionCtrl, '/diablo/MotionCmd', 2)
@@ -56,11 +59,11 @@ class AutoNavNode(Node):
         self.kp = 0.01            # 前进比例控制增益（用于计算 forward = kp * distance）
         self.kp_x = 0.01         # 转弯比例控制增益（用于计算 left = -kp_x * target_x）
         # self.v_min = 0.05         # 最小前进速度（m/s）
-        self.v_max = 0.2        # 最大前进速度（m/s）
+        self.v_max = 0.15        # 最大前进速度（m/s）
         self.turn_gain = 0.05     # 左右修正增益（备用控制）
         self.leg_gain = 0.8       # 上下修正增益（备用控制）
         self.rotate_speed = 0.1   # 原地旋转速度
-        self.r_max = 0.05      # 最大左右修正速度（m/s）
+        self.r_max = 0.03      # 最大左右修正速度（m/s）
 
         # ===== 目标检测数据缓存 =====
         self.current_detection = None
@@ -110,7 +113,7 @@ class AutoNavNode(Node):
         # robot_z = self.target_z_dict.get(1, 0.0)
         # robot_x = self.target_x_dict.get(1, 0.0)
         magnet_z = self.target_z
-        magnet_x = self.target_x - self.target_z * 0.01 - 5 # 目标 x 坐标修正
+        magnet_x = self.target_x - self.target_z * 0.01 - 6.0 # 目标 x 坐标修正
 
         # 4️⃣ 情况 B：当机器人距离在 (0, 0.5)m 且未检测到电磁铁时（不进行左右调整）
         if 0< magnet_z < 55 and self.current_detection and self.status == 0:

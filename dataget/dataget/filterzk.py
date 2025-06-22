@@ -43,6 +43,7 @@ class lowpass_filter:
 class AutoNavNode(Node):
     def __init__(self):
         super().__init__('filter_node')
+        time.sleep(3)
 
         # ===== ROS 通信接口 =====
         self.publisher = self.create_publisher(MotionCtrl, '/diablo/MotionCmd', 2)
@@ -56,11 +57,11 @@ class AutoNavNode(Node):
         self.ctrl_msg = MotionCtrl()
         self.kp = 0.01            # 前进比例控制增益
         self.kp_x = 0.01         # 转弯比例控制增益
-        self.v_max = 0.2        # 最大前进速度（m/s）
+        self.v_max = 0.15       # 最大前进速度（m/s）
         self.turn_gain = 0.05     # 左右修正增益（备用控制）
         self.leg_gain = 0.8       # 上下修正增益（备用控制）
         self.rotate_speed = 0.1   # 原地旋转速度
-        self.r_max = 0.05      # 最大左右修正速度（m/s）
+        self.r_max = 0.1      # 最大左右修正速度（m/s）
 
         # ===== 目标检测数据缓存 =====
         self.current_detection = None
@@ -113,7 +114,7 @@ class AutoNavNode(Node):
             
         magnet_z = self.target_z 
         # 使用卡尔曼滤波后的x值
-        magnet_x = self.filtered_x - magnet_z * 0.01 - 6.0  # 目标 x 坐标修正
+        magnet_x = self.filtered_x - magnet_z * 0.01 - 3.7  # 目标 x 坐标修正
 
         if 0 < magnet_z < 55 and self.current_detection and self.status == 0:
             self.status = 1
@@ -178,7 +179,8 @@ class AutoNavNode(Node):
                 self.data_records.append({
                     'time': current_time,
                     'raw_x': raw_x,
-                    'filtered_x': self.filtered_x
+                    'filtered_x': self.filtered_x,
+                    'z_value': self.target_z
                 })
 
                 self.get_logger().debug(
@@ -198,7 +200,7 @@ class AutoNavNode(Node):
             filename = os.path.join(os.getcwd(), 'filtered_data.csv')  # 默认当前目录
     
         with open(filename, mode='w', newline='') as file:
-            writer = csv.DictWriter(file, fieldnames=['time', 'raw_x', 'filtered_x'])
+            writer = csv.DictWriter(file, fieldnames=['time', 'raw_x', 'filtered_x','z_value'])
             writer.writeheader()
             for record in self.data_records:
                 writer.writerow(record)

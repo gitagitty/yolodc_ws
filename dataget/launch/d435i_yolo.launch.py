@@ -110,12 +110,12 @@ def generate_launch_description():
         OpaqueFunction(function=launch_setup, kwargs = {'params' : set_configurable_parameters(configurable_parameters)}),
         DeclareLaunchArgument(
             'plan_file',
-            default_value='/home/evan/yolodc_ws/src/TensorRT_YOLO_ROS2/tensorrt_yolo_core/onnx_model/yolov8s-pose.plan',
+            default_value='/home/evan/yolodc_ws/src/tensorrt_yolo_ros2/tensorrt_yolo_core/onnx_model/yolov8s-pose.plan',
             description='Path to the .plan file'
         ),
         DeclareLaunchArgument(
             'onnx_file',
-            default_value='/home/evan/yolodc_ws/src/TensorRT_YOLO_ROS2/tensorrt_yolo_core/onnx_model/yolov8s.onnx',
+            default_value='/home/evan/yolodc_ws/src/tensorrt_yolo_ros2/tensorrt_yolo_core/onnx_model/yolov8s.onnx',
             description='Path to the .onnx file'
         ),
         DeclareLaunchArgument(

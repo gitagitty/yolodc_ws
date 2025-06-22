@@ -110,12 +110,12 @@ def generate_launch_description():
         OpaqueFunction(function=launch_setup, kwargs = {'params' : set_configurable_parameters(configurable_parameters)}),
         DeclareLaunchArgument(
             'plan_file',
-            default_value='/home/evan/yolodc_ws/src/tensorrt_yolo_ros2/tensorrt_yolo_core/onnx_model/yolov8ndc.plan',
+            default_value='/home/evan/yolodc_ws/src/tensorrt_yolo_ros2/tensorrt_yolo_core/onnx_model/yolov5n.plan',
             description='Path to the .plan file'
         ),
         DeclareLaunchArgument(
             'onnx_file',
-            default_value='/home/evan/yolodc_ws/src/tensorrt_yolo_ros2/tensorrt_yolo_core/onnx_model/yolov8ndc.onnx',
+            default_value='/home/evan/yolodc_ws/src/tensorrt_yolo_ros2/tensorrt_yolo_core/onnx_model/yolov5n.onnx',
             description='Path to the .onnx file'
         ),
         DeclareLaunchArgument(
@@ -193,6 +193,6 @@ def generate_launch_description():
 
         Node(
             package='dataget',
-            executable='yoloxyz_node',
+            executable='filter_node',
         ),
     ])
